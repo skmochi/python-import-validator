@@ -1,0 +1,24 @@
+x: XXX
+y: 100
+z: [200, 300, 400]
+
+whitelist:
+  - rootlib: numpy
+    subs:
+    - max
+    - min
+    - round
+  - rootlib: pandas
+    subs:
+    - diff
+
+
+# for test
+testWhitelist:
+  - rootlib: numpy
+    subs:
+    - max
+    - min
+  - rootlib: pandas
+    subs:
+    - diff

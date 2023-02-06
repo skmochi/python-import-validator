@@ -1,0 +1,9 @@
+whitelist:
+  - rootlib: numpy
+    subs:
+    - max
+    - min
+    - round
+  - rootlib: pandas
+    subs:
+    - diff
