@@ -29,7 +29,7 @@ def load_whitelist(filepath):
 
 @dataclasses.dataclass
 class LibraryWhitelist:
-    rootlib: str
+    name: str
     subs: list
     asname: str = None
 
@@ -70,7 +70,7 @@ class CustomVisitor(ast.NodeVisitor):
     def visit_ImportFrom(self, node):
         """
         from X import Y を検出するたびに実行される関数
-        from rootlib import subs
+        from name import subs
         """
         raise ValueError("import is bannd!!")
         # TODO: 必要かよくわからん
@@ -104,9 +104,8 @@ class CustomVisitor(ast.NodeVisitor):
             raise ValueError("call1: 許可されていないメソッドの呼び出しです")
 
         d = CallInfo(parent=node.func.value.id, attr=node.func.attr)
-        # このdが許可リスト内にあるか確認する(rootlib or asnameが一致していればok)
-        # 一致するparentを検索
-        _pass = [x for x in self.whitelist if d.parent in (x.asname, x.rootlib)]
+        # このdが許可リスト内にあるか確認する(name or asnameが一致していればok)
+        _pass = [x for x in self.whitelist if d.parent in (x.asname, x.name)]
         for x in _pass:
             if d.attr not in x.subs:
                 raise ValueError("This method is banned.")

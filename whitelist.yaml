@@ -1,15 +1,15 @@
 library:
-  - rootlib: numpy
+  - name: numpy
     asname: np
     subs:
     - max
     - min
     - round
-  - rootlib: pandas
+  - name: pandas
     asname: pd
     subs:
     - diff
-  - rootlib: math
+  - name: math
     subs:
     - cons
     - sin
@@ -17,3 +17,4 @@ library:
 buildinFunc:
   - name: sum
   - name: min
+  - name: max
