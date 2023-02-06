@@ -145,18 +145,18 @@ class CustomVisitor(ast.NodeVisitor):
         方針: まずはcallのrootlibを特定し、これがwhitelist_subsに含まれているかを確認する
         """
         for info in self.call_info:
-            callname = info["parent"]
-            # callnameがasnameと仮定して走査しrootlibを割り出す
-            _rootlib_from_asname = set([x["rootlib"] for x in self.imported_info if callname in x["asname"]])
-            # callnameがsubsと仮定して走査しrootlibを割り出す
-            _rootlib_from_subs = set([x["rootlib"] for x in self.imported_info if callname in x["subs"]])
-            # callnameがrootlibと仮定して走査しrootlibを割り出す
-            _rootlib_from_rootlib = set([x["rootlib"] for x in self.imported_info if callname in x["rootlib"]])
+            parent = info["parent"]
+            # parentがasnameと仮定して走査しrootlibを割り出す
+            _rootlib_from_asname = set([x["rootlib"] for x in self.imported_info if parent in x["asname"]])
+            # parentがsubsと仮定して走査しrootlibを割り出す
+            _rootlib_from_subs = set([x["rootlib"] for x in self.imported_info if parent in x["subs"]])
+            # parentがrootlibと仮定して走査しrootlibを割り出す
+            _rootlib_from_rootlib = set([x["rootlib"] for x in self.imported_info if parent in x["rootlib"]])
             if len(_rootlib_from_asname | _rootlib_from_subs | _rootlib_from_rootlib) > 1:
                 raise ValueError("asnameの命名を変えてください")
             if len(_rootlib_from_asname | _rootlib_from_subs | _rootlib_from_rootlib) == 1:
                 rootlib = _rootlib_from_asname | _rootlib_from_subs | _rootlib_from_rootlib
-                if callname not in Whitelist.whitelist_subs(rootlib):
+                if parent not in Whitelist.whitelist_subs(rootlib):
                     raise ValueError("禁止されているものが使用されています")
         return
 
