@@ -91,13 +91,13 @@ class CustomVisitor(ast.NodeVisitor):
         # np.sum([1,2])
         # print(vars(node.func))
         # {'value': <ast.Name object at 0x10d765cd0>, 'attr': 'sum', 'ctx': <ast.Load object at 0x10d4dd100>, 'lineno': 6, 'col_offset': 0, 'end_lineno': 6, 'end_col_offset': 6}
-        
+
         # 組み込み関数か否か
         if hasattr(node.func, "id") and not hasattr(node.func, "attr"):
             is_builtin_func = True
         else:
             is_builtin_func = False
-        
+
         # 組み込み関数のバリデーション
         if is_builtin_func:
             user_builtin_func: str = node.func.id
@@ -105,18 +105,6 @@ class CustomVisitor(ast.NodeVisitor):
                 raise ValueError(f"組み込み関数「{user_builtin_func}」は許可されていません")
             return
 
-        # # 以下、組み込み関数以外のバリデーション
-        # # A.B.C.method()のパターンの呼び出しは許可リストの存在しないので弾く
-        # if not hasattr(node.func.value, "id"):
-        #     raise ValueError("call1: 許可されていないメソッドの呼び出しです")
-
-        # d = CallInfo(parent=node.func.value.id, attr=node.func.attr)
-        # # このdが許可リスト内にあるか確認する(name or asnameが一致していればok)
-        # _pass = [x for x in self.whitelist if d.parent in (x.asname, x.name)]
-        # for x in _pass:
-        #     if d.attr not in x.subs:
-        #         raise ValueError("This method is banned.")
-        # TODO: 必要かよくわからん
         self.generic_visit(node)
 
     # def visit_ClassDef(self, node):
@@ -144,6 +132,10 @@ class CustomVisitor(ast.NodeVisitor):
 
 
     def attr_checker(self):
+        """
+        ast.Attributeはvalueとして、ast.Attribute or ast.Name or ast.Callをもつ
+        libに対して使われているattrを再帰的に洗い出してバリデーションする
+        """
         ads: list[AttributeData] = []
         for x in self.attributes:
             print("--------------------------------")
@@ -151,20 +143,51 @@ class CustomVisitor(ast.NodeVisitor):
             print(x)
             print(vars(x))
             ad = AttributeData()
-            # 以下を再帰的に実行する
-            # 多分必ずvalueはある
             if hasattr(x, "value") and isinstance(x.value, ast.Name):
                 ad.libname = x.value.id
                 attrs.append(x.attr)
                 print(ad.libname)
-                # このattributeをvalueとしてもつ親のattributeを検索し、そのattrを取得
-                for y in self.attributes:
-                    if hasattr(y, "value") and x.value == y:
-                        attrs.append(y.attr)
-                        break  # 親は一つしかないため
+
+                # 再帰的に実行する関数
+                def recursive_serch_attr(attribute: ast.Attribute, attrs: list[str]):
+                    # このattributeをvalueとしてもつ親のattributeを検索し、そのattrを取得
+                    for y in self.attributes:
+                        if hasattr(y, "value") and y.value == attribute:
+                            print("RRRR")
+                            print(y.attr)
+                            attrs.append(y.attr)
+                            return recursive_serch_attr(y, attrs)
+                    # 自身のast.Attributeオブジェクトをvalueにもつast.Attributeオブジェクトが存在しない
+                    # => 自身が最後なので再帰探索終了
+                    return attrs
+
+                attrs = recursive_serch_attr(x, attrs)
+
             ad.attrs = attrs
             ads.append(ad)
+        # とりあえずAttributeData(libname=None, attrs=None)を削除
+        # こんなやつができる
+        # e.g. pd.shape = pandas.compat._optional.import_optional_dependency
+        # ads = [AttributeData(libname='pd', attrs=['shape']), AttributeData(libname='pandas', attrs=['compat', '_optional', 'import_optional_dependency'])]
+        ads = [x for x in ads if x.libname != None]
         print("ads: ", ads)
+
+        # ここからwhitelistに合わせてバリデーション
+        for ad in ads:
+            # このdが許可リスト内にあるか確認する(name or asnameが一致していればok)
+            passed_whitelist_data = [x for x in self.whitelist if ad.libname in (x.asname, x.name)]
+            for x in passed_whitelist_data:  # for文使ってるけど多分どうせ要素数1
+                if len(set(ad.attrs) - set(x.subs)) > 0:
+                    raise ValueError("使ってはいけないメソッドを使っています")
+
+
+    def attr_checker2(self):
+        ad = AttributeData()
+        for x in self.attributes:
+            print("#############3")
+            attrs: list[str] = []
+            if hasattr(x, "value") and isinstance(x.value, ast.Call):
+                print(vars(x.value))
 
 
 
@@ -210,9 +233,9 @@ def nodeai_main(df):
 
 code = """
 # a = sum(1,1)
-pd.shape = pandas.compat._optional.import_optional_dependency
+# pd.shape = pandas.compat._optional.import_optional_dependency
 # r = pd.shape("requests")
-# np.arange(6).reshape(2, 3)
+np.arange(6).reshape(2, 3)
 """
 
 tree = ast.parse(code)
@@ -222,4 +245,5 @@ tree = ast.parse(code)
 visitor = CustomVisitor()
 visitor.visit(tree)  # def visitXXX()を全て実行
 visitor.attr_checker()
+visitor.attr_checker2()
 # visitor.additional_validation()

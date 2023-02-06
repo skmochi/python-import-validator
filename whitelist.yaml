@@ -5,6 +5,8 @@ library:
     - max
     - min
     - round
+    - reshape
+    - arange
   - name: pandas
     asname: pd
     subs:
