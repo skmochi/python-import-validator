@@ -75,7 +75,7 @@ class CustomVisitor(ast.NodeVisitor):
         """
         self.imported_rootlib: set[str] = set()
         self.imported_info: list[ImportInfo] = list()
-        self.call_info: list[dict] = list()
+        self.call_info: list[CallInfo] = list()
         self.whitelist = Whitelist(filepath=WHITELIST_FILEPATH)
 
     def visit_Import(self, node):
@@ -93,7 +93,6 @@ class CustomVisitor(ast.NodeVisitor):
             subs: list[str] = libname.split(".")[1:]
             self.imported_rootlib.add(rootlib)
             asname: str | None = getattr(x, "asname", None)
-            # d = {"rootlib": rootlib, "subs": subs, "asname": asname}
             d = ImportInfo(rootlib=rootlib, subs=list(subs), asname=asname)
             self.imported_info.append(d)
         self.generic_visit(node)
@@ -130,12 +129,13 @@ class CustomVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Call(self, node):
-        # e.g. np.savetext -> np
-        # print(node.func.value.id)
-        # e.g. np.savetext -> savetext
-        # print(node.func.attr)
-        # parent: rootlib or subs or asname
+        print(vars(node.func.value))
+        # import A
+        # A.B.C.method()
+        # 上記ケースだとnode.func.value内にさらにvalueがあり...の構造をとる
+        # -> [method[C[B[A]]]]のような雰囲気
         d = CallInfo(parent=node.func.value.id, attr=node.func.attr)
+        print(d)
         self.call_info.append(d)
         self.generic_visit(node)
 
@@ -203,9 +203,13 @@ class CustomVisitor(ast.NodeVisitor):
 
 
     def check_asnane_independencies(self):
-        # TODO: import_info内にasname同士やrootlib, subsなどとの被りがないか確認
+        # TODO: import_info内にasname同士の被りがないか確認
         # asnameの被りがあると紐付けが困難になるので弾く
-        return
+        asnames = [x.asname for x in self.imported_info if x.asname is not None]
+        print(asnames)
+        if len(asnames) != len(set(asnames)):
+            raise ValueError("asで定義する名前は他のものと被らないようにしてください")
+
 
 code1 = """
 # import numpy as np
@@ -220,10 +224,17 @@ def main():
 
 code = """
 from numpy import min, max as np
+import numpy as np
 from pandas import to_csv as csv
 # from pandas.compat._optional import import_optional_dependency
 
 np.max("AAA")
+"""
+
+code = """
+import pandas as pandas
+
+pandas.compat._optional.import_optional_dependency("requests")
 """
 
 tree = ast.parse(code)
@@ -232,6 +243,7 @@ tree = ast.parse(code)
 
 visitor = CustomVisitor()
 visitor.visit(tree)  # def visitXXX()を全て実行
+visitor.check_asnane_independencies()
 visitor.check_rootlib()
 visitor.check_subs()
 visitor.check_calls()
