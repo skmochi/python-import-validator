@@ -135,7 +135,27 @@ class CustomVisitor(ast.NodeVisitor):
         """
         ast.Attributeはvalueとして、ast.Attribute or ast.Name or ast.Callをもつ
         libに対して使われているattrを再帰的に洗い出してバリデーションする
+        再帰検索のスタートはast.Name or ast.Call
+        
+        e.g. np.arange(6).reshape(2, 3)
+        arangeはast.Name, reshapeはast.Callオブジェクト
+
+        e.g. pandas.compat._optional.import_optional_dependency
+        pandasはast.Name, 他はast.Attributeオブジェクト
         """
+        # 再帰的に実行する関数
+        def recursive_serch_attr(attribute: ast.Attribute, attrs: list[str]):
+            # このattributeをvalueとしてもつ親のattributeを検索し、そのattrを取得
+            for y in self.attributes:
+                if hasattr(y, "value") and y.value == attribute:
+                    print("RRRR")
+                    print(y.attr)
+                    attrs.append(y.attr)
+                    return recursive_serch_attr(y, attrs)
+            # 自身のast.Attributeオブジェクトをvalueにもつast.Attributeオブジェクトが存在しない
+            # => 自身が最後なので再帰探索終了
+            return attrs
+
         ads: list[AttributeData] = []
         for x in self.attributes:
             print("--------------------------------")
@@ -147,21 +167,22 @@ class CustomVisitor(ast.NodeVisitor):
                 ad.libname = x.value.id
                 attrs.append(x.attr)
                 print(ad.libname)
-
-                # 再帰的に実行する関数
-                def recursive_serch_attr(attribute: ast.Attribute, attrs: list[str]):
-                    # このattributeをvalueとしてもつ親のattributeを検索し、そのattrを取得
-                    for y in self.attributes:
-                        if hasattr(y, "value") and y.value == attribute:
-                            print("RRRR")
-                            print(y.attr)
-                            attrs.append(y.attr)
-                            return recursive_serch_attr(y, attrs)
-                    # 自身のast.Attributeオブジェクトをvalueにもつast.Attributeオブジェクトが存在しない
-                    # => 自身が最後なので再帰探索終了
-                    return attrs
-
                 attrs = recursive_serch_attr(x, attrs)
+            if hasattr(x, "value") and isinstance(x.value, ast.Call):
+                attrs.append(x.attr)
+                print("EEEEEEEEEe")
+                # TODO: ast.Callはよくわからないので再帰検索はしていない
+                tmp: ast.Call = x.value
+                if hasattr(tmp, "func") and isinstance(tmp.func, ast.Attribute):
+                    print(vars(tmp.func))
+                    attrs.append(tmp.func.attr)
+                    if hasattr(tmp.func, "value") and isinstance(tmp.func.value, ast.Name):
+                        ad.libname = tmp.func.value.id
+                        print(ad.libname)
+                        attrs = recursive_serch_attr(x, attrs)
+                else:
+                    raise ValueError("複数行に分けて記述してみてください")
+
 
             ad.attrs = attrs
             ads.append(ad)
@@ -245,5 +266,5 @@ tree = ast.parse(code)
 visitor = CustomVisitor()
 visitor.visit(tree)  # def visitXXX()を全て実行
 visitor.attr_checker()
-visitor.attr_checker2()
+# visitor.attr_checker2()
 # visitor.additional_validation()
