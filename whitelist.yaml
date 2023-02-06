@@ -1,8 +1,4 @@
-x: XXX
-y: 100
-z: [200, 300, 400]
-
-whitelist:
+library:
   - rootlib: numpy
     asname: np
     subs:
@@ -17,3 +13,7 @@ whitelist:
     subs:
     - cons
     - sin
+
+buildinFunc:
+  - name: sum
+  - name: min

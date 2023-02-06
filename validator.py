@@ -22,15 +22,20 @@ WHITELIST_FILEPATH = "./whitelist.yaml"
 def load_whitelist(filepath):
     with open(filepath) as file:
         obj = yaml.safe_load(file)
-    whitelist = [WhitelistInfo(**x) for x in obj['whitelist']]
-    return whitelist
+    library_whitelist = [LibraryWhitelist(**x) for x in obj['library']]
+    buildin_whitelist = [BuildinWhitelist(**x) for x in obj['buildinFunc']]
+    return library_whitelist, buildin_whitelist
 
 
 @dataclasses.dataclass
-class WhitelistInfo:
+class LibraryWhitelist:
     rootlib: str
     subs: list
     asname: str = None
+
+@dataclasses.dataclass
+class BuildinWhitelist:
+    name: str
 
 @dataclasses.dataclass
 class CallInfo:
@@ -48,8 +53,9 @@ class CallInfo:
 
 class CustomVisitor(ast.NodeVisitor):
     def __init__(self):
+        self.num_FunctionDef = 0
         self.call_info: list[CallInfo] = list()
-        self.whitelist = load_whitelist(filepath=WHITELIST_FILEPATH)
+        self.whitelist, self.buildin_whitelist = load_whitelist(filepath=WHITELIST_FILEPATH)
 
     def visit_Import(self, node):
         """
@@ -71,10 +77,32 @@ class CustomVisitor(ast.NodeVisitor):
         # self.generic_visit(node)
 
     def visit_Call(self, node):
-        # print(vars(node.func.value))
+        # 組み込み関数
+        # print(vars(node.func))
+        # sum([1,2])
+        # {'id': 'sum', 'ctx': <ast.Load object at 0x10d738100>, 'lineno': 5, 'col_offset': 0, 'end_lineno': 5, 'end_col_offset': 3}
+        # np.sum([1,2])
+        # print(vars(node.func))
+        # {'value': <ast.Name object at 0x10d765cd0>, 'attr': 'sum', 'ctx': <ast.Load object at 0x10d4dd100>, 'lineno': 6, 'col_offset': 0, 'end_lineno': 6, 'end_col_offset': 6}
+        
+        # 組み込み関数か否か
+        if hasattr(node.func, "id") and not hasattr(node.func, "attr"):
+            is_builtin_func = True
+        else:
+            is_builtin_func = False
+        
+        # 組み込み関数のバリデーション
+        if is_builtin_func:
+            user_builtin_func: str = node.func.id
+            if user_builtin_func not in [x.name for x in self.buildin_whitelist]:
+                raise ValueError(f"組み込み関数「{user_builtin_func}」は許可されていません")
+            return
+
+        # 以下、組み込み関数以外のバリデーション
         # A.B.C.method()のパターンの呼び出しは許可リストの存在しないので弾く
         if not hasattr(node.func.value, "id"):
             raise ValueError("call1: 許可されていないメソッドの呼び出しです")
+
         d = CallInfo(parent=node.func.value.id, attr=node.func.attr)
         # このdが許可リスト内にあるか確認する(rootlib or asnameが一致していればok)
         # 一致するparentを検索
@@ -85,6 +113,28 @@ class CustomVisitor(ast.NodeVisitor):
         # TODO: 必要かよくわからん
         # self.generic_visit(node)
 
+    def visit_ClassDef(self, node):
+        raise ValueError("Class is banned.")
+        self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node):
+        raise ValueError("AsyncDef is banned.")
+        self.generic_visit(node)
+
+    def visit_FunctionDef(self, node):
+        self.num_FunctionDef += 1
+        print(node.name) # 関数名
+        print(vars(node.args.args[0])) # 引数
+        # {'name': 'main', 'args': <ast.arguments object at 0x104ce9f70>, 'body': [<ast.Return object at 0x104ce9e20>], 'decorator_list': [], 'returns': None, 'type_comment': None, 'lineno': 8, 'col_offset': 0, 'end_lineno': 9, 'end_col_offset': 10}
+        if node.name != "nodeai_main":
+            raise ValueError("関数は「nodeai_main」のみ許可されています")
+        if len(node.args.args) != 1:
+            raise ValueError("nodeai_main関数の引数は1つのみ許可されています")
+        self.generic_visit(node)
+
+    def additional_validation(self):
+        if self.num_FunctionDef != 1:
+            raise ValueError("関数「nodeai_main」が必要です")
 
 code1 = """
 # import numpy as np
@@ -110,7 +160,13 @@ code = """
 # import pandas as pandas
 
 # pandas.compat._optional.import_optional_dependency("requests")
+sum([1, 2])
+# np.sum([1, 2])
 numpy.round(1)
+# def nodeai_main(df):
+#     return
+# def nodeai_main(df):
+#     return
 """
 
 tree = ast.parse(code)
@@ -119,3 +175,4 @@ tree = ast.parse(code)
 
 visitor = CustomVisitor()
 visitor.visit(tree)  # def visitXXX()を全て実行
+visitor.additional_validation()
