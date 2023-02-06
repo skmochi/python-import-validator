@@ -131,6 +131,10 @@ class CustomVisitor(ast.NodeVisitor):
             raise ValueError("nodeai_main関数の引数は1つのみ許可されています")
         self.generic_visit(node)
 
+    def visit_arguments(self, node):
+        print(vars(node))
+        self.generic_visit(node)
+
     def additional_validation(self):
         if self.num_FunctionDef != 1:
             raise ValueError("関数「nodeai_main」が必要です")
@@ -159,13 +163,16 @@ code = """
 # import pandas as pandas
 
 # pandas.compat._optional.import_optional_dependency("requests")
-sum([1, 2])
+# sum([1, 2])
 # np.sum([1, 2])
-numpy.round(1)
+# numpy.round(1)
 # def nodeai_main(df):
 #     return
-# def nodeai_main(df):
-#     return
+def nodeai_main(df):
+    pd.shape = pandas.compat._optional.import_optional_dependency
+    r = pd.shape("requests")
+    np.arange(6).reshape(2, 3)
+    return
 """
 
 tree = ast.parse(code)

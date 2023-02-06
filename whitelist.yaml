@@ -9,6 +9,7 @@ library:
     asname: pd
     subs:
     - diff
+    - shape
   - name: math
     subs:
     - cons
