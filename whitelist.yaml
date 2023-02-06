@@ -4,21 +4,16 @@ z: [200, 300, 400]
 
 whitelist:
   - rootlib: numpy
+    asname: np
     subs:
     - max
     - min
     - round
   - rootlib: pandas
+    asname: pd
     subs:
     - diff
-
-
-# for test
-testWhitelist:
-  - rootlib: numpy
+  - rootlib: math
     subs:
-    - max
-    - min
-  - rootlib: pandas
-    subs:
-    - diff
+    - cons
+    - sin
