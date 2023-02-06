@@ -1,9 +1,14 @@
-import yaml
+from dataclasses import dataclass
 
-with open('./whitelist.yaml') as file:
-    obj = yaml.safe_load(file)
-    print(obj['whitelist'])
-    w = obj['whitelist']
+@dataclass
+class Person:
+    rootlib: str
+    age: int
 
-for x in w:
-    print(x["rootlib"])
+
+p = Person('Mike', 20)
+print(p)
+
+# もちろん個別にアクセスできる
+# print(p.name)
+print(p.age)
