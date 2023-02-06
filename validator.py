@@ -50,8 +50,6 @@ class CustomVisitor(ast.NodeVisitor):
         self.imported_rootlib: set[str] = set()
         self.imported_info: list[dict] = list()
         self.call_info: list[dict] = list()
-        self.whitelist_rootlib = ["numpy", "pandas"]
-        self.whitelist_module_method = [{"numpy": ["sum"]}, {"pandas": ["sum", "max"]}]
 
     def visit_Import(self, node):
         """
@@ -146,20 +144,35 @@ class CustomVisitor(ast.NodeVisitor):
         """
         for info in self.call_info:
             parent = info["parent"]
+            attr = info["attr"]
             # parentがasnameと仮定して走査しrootlibを割り出す
-            _rootlib_from_asname = set([x["rootlib"] for x in self.imported_info if parent in x["asname"]])
+            _rootlib_from_asname = [x["rootlib"] for x in self.imported_info if parent in x["asname"]]
             # parentがsubsと仮定して走査しrootlibを割り出す
-            _rootlib_from_subs = set([x["rootlib"] for x in self.imported_info if parent in x["subs"]])
+            _rootlib_from_subs = [x["rootlib"] for x in self.imported_info if parent in x["subs"]]
             # parentがrootlibと仮定して走査しrootlibを割り出す
-            _rootlib_from_rootlib = set([x["rootlib"] for x in self.imported_info if parent in x["rootlib"]])
-            if len(_rootlib_from_asname | _rootlib_from_subs | _rootlib_from_rootlib) > 1:
+            _rootlib_from_rootlib = [x["rootlib"] for x in self.imported_info if parent in x["rootlib"]]
+            sumset = set(_rootlib_from_asname) | set(_rootlib_from_subs) | set(_rootlib_from_rootlib)
+            if len(sumset) > 1:
                 raise ValueError("asnameの命名を変えてください")
-            if len(_rootlib_from_asname | _rootlib_from_subs | _rootlib_from_rootlib) == 1:
-                rootlib = _rootlib_from_asname | _rootlib_from_subs | _rootlib_from_rootlib
-                if parent not in Whitelist.whitelist_subs(rootlib):
-                    raise ValueError("禁止されているものが使用されています")
+            if _rootlib_from_asname:
+                for info in self.imported_info:
+                    if info["asname"] == _rootlib_from_asname[0]:
+                        rootlib = info["rootlib"]  # rootlibを特定
+                        if attr not in Whitelist.whitelist_subs(rootlib):
+                            raise ValueError("禁止されているものが使用されています")
+            if _rootlib_from_subs:
+                for info in self.imported_info:
+                    if info["asname"] == _rootlib_from_subs[0]:
+                        rootlib = info["rootlib"]  # rootlibを特定
+                        if attr not in Whitelist.whitelist_subs(rootlib):
+                            raise ValueError("禁止されているものが使用されています")
+            if _rootlib_from_rootlib:
+                for info in self.imported_info:
+                    if info["asname"] == _rootlib_from_rootlib[0]:
+                        rootlib = info["rootlib"]  # rootlibを特定
+                        if attr not in Whitelist.whitelist_subs(rootlib):
+                            raise ValueError("禁止されているものが使用されています")
         return
-
 
 
     def check_asnane_independencies(self):
@@ -180,10 +193,10 @@ def main():
 
 code = """
 from numpy import min, max as np
-# from pandas import to_csv as csv
+from pandas import to_csv as csv
 # from pandas.compat._optional import import_optional_dependency
 
-np.savetext("AAA")
+np.max("AAA")
 """
 
 tree = ast.parse(code)
