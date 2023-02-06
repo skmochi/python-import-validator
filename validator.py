@@ -51,8 +51,15 @@ class CallInfo:
     attr: str
 
 
+@dataclasses.dataclass
+class AttributeData:
+    libname: str = None
+    attrs: list[str] = None
+
+
 class CustomVisitor(ast.NodeVisitor):
     def __init__(self):
+        self.attributes = []
         self.num_FunctionDef = 0
         self.call_info: list[CallInfo] = list()
         self.whitelist, self.buildin_whitelist = load_whitelist(filepath=WHITELIST_FILEPATH)
@@ -98,42 +105,68 @@ class CustomVisitor(ast.NodeVisitor):
                 raise ValueError(f"組み込み関数「{user_builtin_func}」は許可されていません")
             return
 
-        # 以下、組み込み関数以外のバリデーション
-        # A.B.C.method()のパターンの呼び出しは許可リストの存在しないので弾く
-        if not hasattr(node.func.value, "id"):
-            raise ValueError("call1: 許可されていないメソッドの呼び出しです")
+        # # 以下、組み込み関数以外のバリデーション
+        # # A.B.C.method()のパターンの呼び出しは許可リストの存在しないので弾く
+        # if not hasattr(node.func.value, "id"):
+        #     raise ValueError("call1: 許可されていないメソッドの呼び出しです")
 
-        d = CallInfo(parent=node.func.value.id, attr=node.func.attr)
-        # このdが許可リスト内にあるか確認する(name or asnameが一致していればok)
-        _pass = [x for x in self.whitelist if d.parent in (x.asname, x.name)]
-        for x in _pass:
-            if d.attr not in x.subs:
-                raise ValueError("This method is banned.")
+        # d = CallInfo(parent=node.func.value.id, attr=node.func.attr)
+        # # このdが許可リスト内にあるか確認する(name or asnameが一致していればok)
+        # _pass = [x for x in self.whitelist if d.parent in (x.asname, x.name)]
+        # for x in _pass:
+        #     if d.attr not in x.subs:
+        #         raise ValueError("This method is banned.")
         # TODO: 必要かよくわからん
-        # self.generic_visit(node)
-
-    def visit_ClassDef(self, node):
-        raise ValueError("Class is banned.")
         self.generic_visit(node)
 
-    def visit_AsyncFunctionDef(self, node):
-        raise ValueError("AsyncDef is banned.")
+    # def visit_ClassDef(self, node):
+    #     raise ValueError("Class is banned.")
+    #     self.generic_visit(node)
+
+    # def visit_AsyncFunctionDef(self, node):
+    #     raise ValueError("AsyncDef is banned.")
+    #     self.generic_visit(node)
+
+    # def visit_FunctionDef(self, node):
+    #     self.num_FunctionDef += 1
+    #     print(node.name) # 関数名
+    #     print(vars(node.args.args[0])) # 引数
+    #     # {'name': 'main', 'args': <ast.arguments object at 0x104ce9f70>, 'body': [<ast.Return object at 0x104ce9e20>], 'decorator_list': [], 'returns': None, 'type_comment': None, 'lineno': 8, 'col_offset': 0, 'end_lineno': 9, 'end_col_offset': 10}
+    #     if node.name != "nodeai_main":
+    #         raise ValueError("関数は「nodeai_main」のみ許可されています")
+    #     if len(node.args.args) != 1:
+    #         raise ValueError("nodeai_main関数の引数は1つのみ許可されています")
+    #     self.generic_visit(node)
+
+    def visit_Attribute(self, node):
+        self.attributes.append(node)
         self.generic_visit(node)
 
-    def visit_FunctionDef(self, node):
-        self.num_FunctionDef += 1
-        print(node.name) # 関数名
-        print(vars(node.args.args[0])) # 引数
-        # {'name': 'main', 'args': <ast.arguments object at 0x104ce9f70>, 'body': [<ast.Return object at 0x104ce9e20>], 'decorator_list': [], 'returns': None, 'type_comment': None, 'lineno': 8, 'col_offset': 0, 'end_lineno': 9, 'end_col_offset': 10}
-        if node.name != "nodeai_main":
-            raise ValueError("関数は「nodeai_main」のみ許可されています")
-        if len(node.args.args) != 1:
-            raise ValueError("nodeai_main関数の引数は1つのみ許可されています")
-        self.generic_visit(node)
 
-    def visit_arguments(self, node):
-        print(vars(node))
-        self.generic_visit(node)
+    def attr_checker(self):
+        ads: list[AttributeData] = []
+        for x in self.attributes:
+            print("--------------------------------")
+            attrs: list[str] = []
+            print(x)
+            print(vars(x))
+            ad = AttributeData()
+            # 以下を再帰的に実行する
+            # 多分必ずvalueはある
+            if hasattr(x, "value") and isinstance(x.value, ast.Name):
+                ad.libname = x.value.id
+                attrs.append(x.attr)
+                print(ad.libname)
+                # このattributeをvalueとしてもつ親のattributeを検索し、そのattrを取得
+                for y in self.attributes:
+                    if hasattr(y, "value") and x.value == y:
+                        attrs.append(y.attr)
+                        break  # 親は一つしかないため
+            ad.attrs = attrs
+            ads.append(ad)
+        print("ads: ", ads)
+
+
 
     def additional_validation(self):
         if self.num_FunctionDef != 1:
@@ -175,10 +208,18 @@ def nodeai_main(df):
     return
 """
 
+code = """
+# a = sum(1,1)
+pd.shape = pandas.compat._optional.import_optional_dependency
+# r = pd.shape("requests")
+# np.arange(6).reshape(2, 3)
+"""
+
 tree = ast.parse(code)
 # print(vars(tree.body[-1].value.func.value))  # ast.FunctionDef
 
 
 visitor = CustomVisitor()
 visitor.visit(tree)  # def visitXXX()を全て実行
-visitor.additional_validation()
+visitor.attr_checker()
+# visitor.additional_validation()

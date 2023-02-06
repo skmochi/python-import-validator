@@ -8,6 +8,8 @@ import ast
 
 
 class Visitor(ast.NodeVisitor):
+    def __init__(self):
+        self.attributes = []
 
     def visit_Num(self, node):
         print(node)
@@ -224,8 +226,13 @@ class Visitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Attribute(self, node):
+        self.attributes.append(node)
         print(node)
         print(vars(node))
+        # subs = []
+        # subs.append(node.attr)
+        # print("3333")
+        # print(subs)
         self.generic_visit(node)
 
     def visit_Subscript(self, node):
@@ -409,11 +416,13 @@ class Visitor(ast.NodeVisitor):
         print(node)
         self.generic_visit(node)
 
+    def my(self):
+        print(self.attributes)
 
 SOURCE = """
-# a = sum(1,1)
-# pd.shape = pandas.compat._optional.import_optional_dependency
-# r = pd.shape("requests")
+a = sum(1,1)
+pd.shape = pandas.compat._optional.import_optional_dependency
+r = pd.shape("requests")
 np.arange(6).reshape(2, 3)
 """
 
@@ -421,3 +430,4 @@ if __name__ == "__main__":
     root = ast.parse(SOURCE)
     visitor = Visitor()
     visitor.visit(root)
+    visitor.my()
