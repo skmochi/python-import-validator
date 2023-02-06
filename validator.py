@@ -11,34 +11,34 @@ import ast
 import yaml
 
 
+WHITELIST_FILEPATH = "./whitelist.yaml"
+
+
 # TODO: リファクタリング
 class Whitelist():
-    @staticmethod
-    def whitelist_rootlib() -> set[str]:
-        with open('./whitelist.yaml') as file:
-            obj = yaml.safe_load(file)
-            whitelist = obj['whitelist']
-        whitelist_rootlib = [x["rootlib"] for x in whitelist]
-        return set(whitelist_rootlib)
-
-    @staticmethod
-    def whitelist_subs(rootlib) -> set[str]:
-        with open('./whitelist.yaml') as file:
-            obj = yaml.safe_load(file)
-            whitelist = obj['whitelist']
-        whitelist_subs = [x["subs"] for x in whitelist if x["rootlib"] == rootlib]
-        if whitelist_subs:  # もしrootlibがあればwhitelist内にあれば
-            whitelist_subs:list[str] = whitelist_subs[0]
-        return set(whitelist_subs)
-
-    def load_whitelist(file):
+    def __init__(self, filepath):
         """
         Return: [{'rootlib': 'numpy', 'subs': ['max', 'min', 'round']}]
         """
-        with open('./whitelist.yaml') as file:
+        with open(filepath) as file:
             obj = yaml.safe_load(file)
-            print(obj['whitelist'])
-        return obj['whitelist']
+        self.whitelist: list[dict] = obj['whitelist']
+
+    def whitelist_rootlib(self) -> set[str]:
+        """
+        whitelistのrootlibのsetを返す
+        """
+        whitelist_rootlib = [x["rootlib"] for x in self.whitelist]
+        return set(whitelist_rootlib)
+
+    def whitelist_subs(self, rootlib) -> set:
+        """
+        whitelistの指定rootlibのsubsのsetを返す
+        """
+        whitelist_subs = [x["subs"] for x in self.whitelist if x["rootlib"] == rootlib]
+        if whitelist_subs:  # もし指定rootlibがwhitelist内にあれば
+            whitelist_subs:list[str] = whitelist_subs[0]
+        return set(whitelist_subs)
 
 
 class CustomVisitor(ast.NodeVisitor):
@@ -50,11 +50,12 @@ class CustomVisitor(ast.NodeVisitor):
         self.imported_rootlib: set[str] = set()
         self.imported_info: list[dict] = list()
         self.call_info: list[dict] = list()
+        self.whitelist = Whitelist(filepath=WHITELIST_FILEPATH)
 
     def visit_Import(self, node):
         """
         import X を検出するたびに実行される関数
-        import rootlib
+        バリデーションに必要なデータ構造を構築
         """
         print("visit_Import")
         # import os, sys の場合、node.namesの要素は2つ
@@ -118,7 +119,7 @@ class CustomVisitor(ast.NodeVisitor):
         """
         - rootlibがwhitelistにあるか確認
         """
-        whitelist_rootlib = Whitelist.whitelist_rootlib()
+        whitelist_rootlib = self.whitelist.whitelist_rootlib()
         diff = self.imported_rootlib - whitelist_rootlib
         if len(diff) == 0:
             return
@@ -132,7 +133,7 @@ class CustomVisitor(ast.NodeVisitor):
         for info in self.imported_info:
             rootlib = info["rootlib"]
             subs = set(info["subs"])
-            whitelist_subs = Whitelist.whitelist_subs(rootlib)
+            whitelist_subs = self.whitelist.whitelist_subs(rootlib)
             diff = subs - whitelist_subs
             if len(diff) > 0:
                 raise ValueError(f"imported bannd method: {list(diff)[0]}")
@@ -158,19 +159,19 @@ class CustomVisitor(ast.NodeVisitor):
                 for info in self.imported_info:
                     if info["asname"] == _rootlib_from_asname[0]:
                         rootlib = info["rootlib"]  # rootlibを特定
-                        if attr not in Whitelist.whitelist_subs(rootlib):
+                        if attr not in self.whitelist.whitelist_subs(rootlib):
                             raise ValueError("禁止されているものが使用されています")
             if _rootlib_from_subs:
                 for info in self.imported_info:
                     if info["asname"] == _rootlib_from_subs[0]:
                         rootlib = info["rootlib"]  # rootlibを特定
-                        if attr not in Whitelist.whitelist_subs(rootlib):
+                        if attr not in self.whitelist.whitelist_subs(rootlib):
                             raise ValueError("禁止されているものが使用されています")
             if _rootlib_from_rootlib:
                 for info in self.imported_info:
                     if info["asname"] == _rootlib_from_rootlib[0]:
                         rootlib = info["rootlib"]  # rootlibを特定
-                        if attr not in Whitelist.whitelist_subs(rootlib):
+                        if attr not in self.whitelist.whitelist_subs(rootlib):
                             raise ValueError("禁止されているものが使用されています")
         return
 
